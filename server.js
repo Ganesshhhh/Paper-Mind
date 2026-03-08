@@ -1,123 +1,99 @@
-import express from "express";
-import fetch from "node-fetch";
-import dotenv from "dotenv";
-import cors from "cors";
-import path from "path";
-import pdfParse from "pdf-parse";
-import mammoth from "mammoth";
-import Tesseract from "tesseract.js";
+require('dotenv').config();
+const express = require('express');
+const cors    = require('cors');
+const fetch   = require('node-fetch');
+const path    = require('path');
 
-dotenv.config();
-
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3000;
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
+// ── Middleware ──
 app.use(cors());
-app.use(express.json({ limit: "50mb" }));
-app.use(express.static("public"));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-/* Health check */
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", model: "llama-3.1-8b-instant" });
+// ── Health check ──
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    provider: 'groq',
+    model: 'llama-3.3-70b-versatile' 
+  });
 });
 
-/* Document extraction */
-async function extractText(doc) {
-  const { type, contentBase64 } = doc;
-  const buffer = Buffer.from(contentBase64, "base64");
+// ── Groq proxy ──
+app.post('/api/chat', async (req, res) => {
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'GROQ_API_KEY not configured on server.' });
+  }
 
   try {
-    if (type === "pdf") {
-      const data = await pdfParse(buffer);
-      return data.text || "";
+    const { messages, system } = req.body;
+
+    // Format messages for Groq (they use a different structure)
+    const groqMessages = [];
+    
+    // Add system message if provided
+    if (system) {
+      groqMessages.push({
+        role: 'system',
+        content: system
+      });
     }
-    if (type === "word") {
-      const { value } = await mammoth.extractRawText({ buffer });
-      return value || "";
+    
+    // Add conversation history
+    if (messages && Array.isArray(messages)) {
+      groqMessages.push(...messages);
     }
-    if (type === "image") {
-      const { data: { text } } = await Tesseract.recognize(buffer, "eng");
-      return text || "";
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile', // Free model, 8k context
+        messages: groqMessages,
+        max_tokens: 1000,
+        temperature: 0.1, // Lower temp for factual answers
+        top_p: 0.9,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Groq API error:', data);
+      return res.status(response.status).json({ 
+        error: data.error?.message || 'Groq API error' 
+      });
     }
-    if (type === "text") {
-      return buffer.toString("utf-8");
-    }
-    return "";
+
+    // Transform Groq response to match expected format
+    const formattedResponse = {
+      content: [{
+        type: 'text',
+        text: data.choices[0]?.message?.content || ''
+      }]
+    };
+
+    res.json(formattedResponse);
   } catch (err) {
-    console.error(`Error extracting ${type}:`, err);
-    return "";
-  }
-}
-
-/* Chat endpoint */
-app.post("/api/chat", async (req, res) => {
-  try {
-    const { messages, documents } = req.body;
-
-    if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: "messages array required" });
-    }
-
-    console.log("Documents received:", documents?.length || 0);
-
-    // Extract all documents
-    const docTexts = documents?.length
-      ? await Promise.all(documents.map(extractText))
-      : [];
-
-    const docContext = docTexts
-      .map((text, i) => `Document ${i + 1}:\n${text}`)
-      .join("\n\n");
-
-    const question = messages[messages.length - 1]?.content || "No question provided";
-
-    const prompt = `
-You are an AI assistant.
-
-Use the provided DOCUMENTS to answer the QUESTION.
-
-If the answer is not in the documents, say:
-"I couldn't find that information in the provided documents."
-
-DOCUMENTS:
-${docContext}
-
-QUESTION:
-${question}
-`;
-
-    const groqResponse = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.2,
-          max_tokens: 1024,
-        }),
-      }
-    );
-
-    const data = await groqResponse.json();
-    const aiText =
-      data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || "No response generated";
-
-    res.json({ content: [{ text: aiText }] });
-  } catch (error) {
-    console.error("Server error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Proxy error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-/* Serve frontend */
-app.get("*", (req, res) => {
-  res.sendFile(path.resolve("public/index.html"));
+// ── Catch-all → serve index.html ──
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`\n🧠 Paper Mind (Groq Edition) running at http://localhost:${PORT}`);
+  console.log(`   API key: ${process.env.GROQ_API_KEY ? '✓ loaded' : '✗ MISSING — set GROQ_API_KEY in .env'}`);
+  console.log(`   Free tier: 30 req/min, no credit card required!\n`);
+});
