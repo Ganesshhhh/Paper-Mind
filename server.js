@@ -19,7 +19,7 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    model: "llama3-70b-8192"
+    model: "llama-3.1-8b-instant"
   });
 });
 
@@ -41,7 +41,7 @@ app.post("/api/chat", async (req, res) => {
           Authorization: `Bearer ${GROQ_API_KEY}`
         },
         body: JSON.stringify({
-          model: "llama3-70b-8192",
+          model: "llama-3.1-8b-instant",
           messages: messages,
           temperature: 0.7
         })
