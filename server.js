@@ -14,7 +14,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Health check ──
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', model: 'claude-sonnet-4-20250514' });
+  const hasKey = !!process.env.ANTHROPIC_API_KEY;
+  res.json({ status: 'ok', apiKey: hasKey ? 'configured' : 'MISSING' });
 });
 
 // ── Anthropic proxy ──
@@ -22,13 +23,16 @@ app.post('/api/chat', async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
   if (!apiKey) {
+    console.error('❌ ANTHROPIC_API_KEY is not set');
     return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server.' });
   }
 
   try {
     const { model, max_tokens, system, messages } = req.body;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    console.log(`→ /api/chat  model=${model}  messages=${messages?.length}  hasSystem=${!!system}`);
+
+    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
       method:  'POST',
       headers: {
         'Content-Type':      'application/json',
@@ -43,17 +47,23 @@ app.post('/api/chat', async (req, res) => {
       }),
     });
 
-    const data = await response.json();
+    const data = await anthropicRes.json();
 
-    if (!response.ok) {
-      console.error('Anthropic API error:', data);
-      return res.status(response.status).json({ error: data.error?.message || 'Anthropic API error' });
+    if (!anthropicRes.ok) {
+      console.error(`❌ Anthropic ${anthropicRes.status}:`, JSON.stringify(data));
+      return res.status(anthropicRes.status).json({
+        error: data?.error?.message || 'Anthropic API error',
+        type:  data?.error?.type,
+        full:  data,
+      });
     }
 
+    console.log(`✓ ok  stop_reason=${data.stop_reason}`);
     res.json(data);
+
   } catch (err) {
-    console.error('Proxy error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ Proxy error:', err.message);
+    res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });
 
