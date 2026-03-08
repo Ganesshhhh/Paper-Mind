@@ -10,7 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 app.use(express.static("public"));
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
@@ -23,14 +23,36 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-/* Chat endpoint */
+/* Chat endpoint with document context */
 app.post("/api/chat", async (req, res) => {
   try {
-    const { messages } = req.body;
+    const { messages, documents } = req.body;
 
     if (!Array.isArray(messages)) {
       return res.status(400).json({ error: "Messages must be an array" });
     }
+
+    // Combine uploaded document text
+    const docContext = Array.isArray(documents)
+      ? documents.map(doc => doc.content).join("\n\n")
+      : "";
+
+    // Latest user question
+    const question = messages[messages.length - 1]?.content || "";
+
+    // Build prompt
+    const prompt = `
+You are an AI assistant that answers questions based on company documents.
+
+DOCUMENTS:
+${docContext}
+
+QUESTION:
+${question}
+
+Answer clearly using the documents when relevant.
+If the answer is not in the documents, say you don't know.
+`;
 
     const response = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
@@ -42,8 +64,13 @@ app.post("/api/chat", async (req, res) => {
         },
         body: JSON.stringify({
           model: "llama-3.1-8b-instant",
-          messages: messages,
-          temperature: 0.7
+          messages: [
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature: 0.3
         })
       }
     );
