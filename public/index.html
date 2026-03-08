@@ -866,6 +866,7 @@
         body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system: sys, messages: conversationHistory })
       });
       const data   = await res.json();
+      if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
       const answer = data.content?.map(c => c.text||'').join('') || 'Sorry, no response generated.';
       conversationHistory.push({ role: 'assistant', content: answer });
       let source = null;
@@ -877,7 +878,7 @@
       appendMsg('ai', formatAnswer(answer), source);
     } catch(err) {
       removeTyping();
-      appendMsg('ai', '<span style="color:#f06060">⚠ Connection error. Please try again.</span>');
+      appendMsg('ai', `<span style="color:#f06060">⚠ ${err.message || 'Connection error. Please try again.'}</span>`);
     }
     sendBtn.disabled = false; isTyping = false;
   }
