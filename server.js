@@ -33,7 +33,7 @@ app.get("/api/health", (req, res) => {
 app.post("/api/chat", async (req, res) => {
   try {
 
-    console.log("Incoming request body:", req.body);
+    console.log("Incoming request:", req.body);
 
     const { messages, documents } = req.body;
 
@@ -54,7 +54,7 @@ app.post("/api/chat", async (req, res) => {
       console.log("Documents received:", documents.length);
 
       docContext = documents
-        .map((doc, index) => `Document ${index + 1}:\n${doc.content}`)
+        .map((doc, i) => `Document ${i + 1}:\n${doc.content}`)
         .join("\n\n");
 
     } else {
@@ -64,22 +64,22 @@ app.post("/api/chat", async (req, res) => {
     }
 
     /* ==============================
-       Latest user question
+       Latest User Question
     ============================== */
 
     const question =
       messages[messages.length - 1]?.content || "No question provided";
 
     /* ==============================
-       Prompt construction
+       Prompt
     ============================== */
 
     const prompt = `
 You are an AI assistant.
 
-Use the provided DOCUMENTS to answer the QUESTION.
+Use the DOCUMENTS to answer the QUESTION.
 
-If the answer is not in the documents, say:
+If the answer is not found in the documents, say:
 "I couldn't find that information in the provided documents."
 
 DOCUMENTS:
@@ -90,7 +90,7 @@ ${question}
 `;
 
     /* ==============================
-       Groq API Call
+       Call Groq API
     ============================== */
 
     const groqResponse = await fetch(
@@ -132,16 +132,14 @@ ${question}
       data?.choices?.[0]?.message?.content ||
       "No response generated";
 
+    console.log("AI Reply:", aiText);
+
     /* ==============================
-       Send response
+       Send Response to Frontend
     ============================== */
 
     res.json({
-      content: [
-        {
-          text: aiText
-        }
-      ]
+      reply: aiText
     });
 
   } catch (error) {
@@ -156,7 +154,7 @@ ${question}
 });
 
 /* ==============================
-   Serve frontend
+   Serve Frontend
 ============================== */
 
 app.get("*", (req, res) => {
