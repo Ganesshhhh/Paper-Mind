@@ -2,6 +2,7 @@ import express from "express";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
 import cors from "cors";
+import path from "path";
 
 dotenv.config();
 
@@ -10,13 +11,14 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static("public"));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 /*
 Health check
 */
-app.get("/health", (req, res) => {
+app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
     model: "gemini-1.5-flash"
@@ -26,7 +28,7 @@ app.get("/health", (req, res) => {
 /*
 Chat endpoint
 */
-app.post("/chat", async (req, res) => {
+app.post("/api/chat", async (req, res) => {
   try {
     const { messages } = req.body;
 
@@ -34,7 +36,7 @@ app.post("/chat", async (req, res) => {
       return res.status(400).json({ error: "Messages required" });
     }
 
-    // Convert messages into a single prompt
+    // convert messages to prompt
     const prompt = messages.map(m => m.content).join("\n");
 
     const response = await fetch(
@@ -79,6 +81,13 @@ app.post("/chat", async (req, res) => {
     console.error("Server error:", error);
     res.status(500).json({ error: "Server error" });
   }
+});
+
+/*
+Serve frontend
+*/
+app.get("*", (req, res) => {
+  res.sendFile(path.resolve("public/index.html"));
 });
 
 /*
