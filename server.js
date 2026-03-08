@@ -32,6 +32,14 @@ app.post('/api/chat', async (req, res) => {
 
     console.log(`→ /api/chat  model=${model}  messages=${messages?.length}  hasSystem=${!!system}`);
 
+    // Build request body — only include system if non-empty (null/undefined causes 400)
+    const requestBody = {
+      model:      model      || 'claude-3-5-sonnet-20241022',
+      max_tokens: max_tokens || 1000,
+      messages:   messages   || [],
+    };
+    if (system) requestBody.system = system;
+
     const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
       method:  'POST',
       headers: {
@@ -39,12 +47,7 @@ app.post('/api/chat', async (req, res) => {
         'x-api-key':         apiKey,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({
-        model:      model      || 'claude-sonnet-4-20250514',
-        max_tokens: max_tokens || 1000,
-        system,
-        messages,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const data = await anthropicRes.json();
