@@ -16,31 +16,31 @@ app.use(express.static("public"));
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 /*
-Health check
+Health Check
 */
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    model: "gemini-1.5-flash"
+    model: "gemini-2.0-flash"
   });
 });
 
 /*
-Chat endpoint
+Chat Endpoint
 */
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages } = req.body;
 
-    if (!messages) {
-      return res.status(400).json({ error: "Messages required" });
+    if (!Array.isArray(messages)) {
+      return res.status(400).json({ error: "Messages must be an array" });
     }
 
-    // convert messages to prompt
+    // Convert messages to a single prompt
     const prompt = messages.map(m => m.content).join("\n");
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: {
@@ -84,14 +84,14 @@ app.post("/api/chat", async (req, res) => {
 });
 
 /*
-Serve frontend
+Serve Frontend
 */
 app.get("*", (req, res) => {
   res.sendFile(path.resolve("public/index.html"));
 });
 
 /*
-Start server
+Start Server
 */
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
