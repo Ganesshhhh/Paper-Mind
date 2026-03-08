@@ -17,21 +17,14 @@ app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.static("public"));
 
-/* ==============================
-   Health Check
-============================== */
+/* Health check */
 app.get("/api/health", (req, res) => {
-  res.json({
-    status: "ok",
-    model: "llama-3.1-8b-instant",
-  });
+  res.json({ status: "ok", model: "llama-3.1-8b-instant" });
 });
 
-/* ==============================
-   Document Text Extraction
-============================== */
+/* Document extraction */
 async function extractText(doc) {
-  const { type, contentBase64 } = doc; // "pdf", "word", "image", "text"
+  const { type, contentBase64 } = doc;
   const buffer = Buffer.from(contentBase64, "base64");
 
   try {
@@ -57,9 +50,7 @@ async function extractText(doc) {
   }
 }
 
-/* ==============================
-   Chat Endpoint
-============================== */
+/* Chat endpoint */
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages, documents } = req.body;
@@ -68,11 +59,12 @@ app.post("/api/chat", async (req, res) => {
       return res.status(400).json({ error: "messages array required" });
     }
 
-    // Extract all documents in parallel
-    let docTexts = [];
-    if (Array.isArray(documents) && documents.length > 0) {
-      docTexts = await Promise.all(documents.map(extractText));
-    }
+    console.log("Documents received:", documents?.length || 0);
+
+    // Extract all documents
+    const docTexts = documents?.length
+      ? await Promise.all(documents.map(extractText))
+      : [];
 
     const docContext = docTexts
       .map((text, i) => `Document ${i + 1}:\n${text}`)
@@ -95,22 +87,26 @@ QUESTION:
 ${question}
 `;
 
-    const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "llama-3.1-8b-instant",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.2,
-        max_tokens: 1024,
-      }),
-    });
+    const groqResponse = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
+          max_tokens: 1024,
+        }),
+      }
+    );
 
     const data = await groqResponse.json();
-    const aiText = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || "No response generated";
+    const aiText =
+      data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || "No response generated";
 
     res.json({ content: [{ text: aiText }] });
   } catch (error) {
@@ -119,16 +115,9 @@ ${question}
   }
 });
 
-/* ==============================
-   Serve Frontend
-============================== */
+/* Serve frontend */
 app.get("*", (req, res) => {
   res.sendFile(path.resolve("public/index.html"));
 });
 
-/* ==============================
-   Start Server
-============================== */
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
